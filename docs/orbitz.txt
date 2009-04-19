@@ -1,0 +1,165 @@
+-module(irc_bot).
+-author("orbitz@ortdotlove.net").
+-include("db.hrl").
+-include("irc.hrl").
+
+-export([test/0, test/1, start/1, stop/2, proceed/1]).
+-export([say/3]).
+-export([add_bot/1, get_botlist/0, start_bots/0]).
+
+-record(self, {client, nick, configuration, handler}).
+
+start(Client) ->
+    spawn_link(?MODULE, init, [Client]).
+
+proceed(Client) ->
+    info     = #irc_client_info {
+		     nick     = Client#irc_bot.nick,
+		     realname = Client#irc_bot.realname,
+		     servers  = Client#irc_bot.servers,
+		     handler  = self(),
+		     password = Client#irc_bot.password
+                     },
+    Configuration = dict_proc:start(dict:from_list([{join_on_connect, Client#irc_bot.channels}])),
+    Client        = irc_lib:start(info),
+    Handler       = Client#irc_bot.handler,
+    proceed(#self{ client=Client, configuration=Configuration, handler=Handler}, connecting).
+
+
+proceed(Self, connecting) ->
+    Client  = Self#self.client,
+    Handler = Self#self.handler,
+    receive
+        { irc_connect, Client, Nick } ->
+            % Do connect stuff
+            join_channels(Client, dict_proc:fetch(join_on_connect, Self#self.dict)),
+            proceed(Self#self{nick=Nick}, idle);
+        % Only the handler can stop it
+        { stop, Handler, _ } ->
+            Handler ! {stop, self()};
+        Error ->
+            exit({'EXIT', Error})
+    end;
+proceed(Self, pong) ->
+    Client=Self#self.client,
+    receive
+        {irc_message, Client, {_, "PONG", _}} ->
+            proceed(Self, idle)
+    after pong_timeout() ->
+            irc_lib:disconnect(Client),
+            irc_lib:connect(Client),
+            proceed(Self, connecting)
+    end;
+proceed(Self, idle) ->
+    Client  = Self#self.client,
+    Nick    = Self#self.nick,
+    Handler = Self#self.handler,
+    receive
+        { irc_closed, Client } ->
+            irc_lib:connect(Client),
+            proceed(Self, connecting);
+        % Various messages we'll try to handle
+        % Respond to a ping
+        { irc_message, Client, { _,    "PING",    [Server             ]} } ->
+            irc_lib:pong(Client, Server),
+            proceed(Self, idle);
+        % Handle kicks
+        { irc_message, Client, { _,    "KICK",    [Channel, Nick,    _]} } ->
+            irc_lib:join(Client, Channel),
+            proceed(Self, idle);
+        { irc_message, Client, { _,    "KICK",    [Channel, Nick      ]} } ->
+            irc_lib:join(Client, Channel),
+            proceed(Self, idle);
+        % Make sure to relay various messages
+        { irc_message, Client, { From, "PRIVMSG", [To,      Message   ]} } ->
+            irc_relay:relay(From, To, Message),
+            proceed(Self, idle);
+
+        % Catch all IRC messages
+        { irc_message, Client, _ } ->
+            proceed(Self, idle);
+
+        % Stuff from the client
+        { say, Where, What} ->
+            irc_lib:say(Client, Where, What),
+            proceed(Self, idle);
+        { stop, Handler, Message} ->
+            irc_lib:quit(Client, Message),
+            irc_lib:stop(Client),
+            Handler ! {stop, self()}
+    
+    after connection_timeout() ->
+            irc_lib:ping(Client),
+            proceed(Self, pong)
+    end.
+
+
+join_channels(Bot, [Channel | Rest]) ->
+    irc_lib:join(Bot, Channel),
+    join_channels(Bot, Rest);
+join_channels(_, []) ->
+    ok.
+
+connection_timeout() ->
+    % 10 minutes
+    600000.
+
+pong_timeout() ->
+    % 10 Seconds
+    10000.
+
+% -------------------------------------------------------------
+% Functions used to interact with the bot
+say(Bot, Where, What) ->
+    Bot ! {say, Where, What}.
+
+stop(Bot, Message) ->
+    Bot ! {stop, self(), Message},
+    receive
+        {stop, Bot} ->
+            ok
+    end.
+
+% -------------------------------------------------------------
+% Functions for manipulating the bot database
+add_bot({Botname, Nick, Realname, Servers, Channels, Password}) ->
+    p1_db:insert_row(#irc_bot_db{botname=Botname, nick=Nick, realname=Realname, servers=Servers, channels=Channels, password=Password}).
+
+get_botlist() ->
+    Query = #irc_bot_db{botname='$1', _ = '_'},
+    p1_db:select(irc_bot_db, [{Query, [], ['$1']}]).
+
+start_bots() ->
+    F = fun(Bot, Acc) ->
+                Acc ++ [#running_client{name=Bot#irc_bot_db.botname, pid=start(rec_convert:convert(irc_bot_db, irc_bot, Bot))}]
+        end,
+    p1_db:foldl(F, [], irc_bot_db).
+
+% -------------------------------------------------------------
+% Unit tests
+test() ->
+    irc_lookup:start(),
+    P = start(#irc_bot{nick="ort_test", realname="foo", servers=[{"irc.freenode.net", 6667}], channels=["#ai-nocrackpots"]}),
+    timer:sleep(10000),
+    say(P, "#ai-nocrackpots", "This is test"),
+    stop(P, "zoinks"),
+    irc_lookup:shutdown().
+
+test(idling) ->
+    P = start(#irc_bot{nick="ort_test", realname="foo", servers=[{"irc.freenode.net", 6667}], channels=["#ai-nocrackpots"]}),
+    wait_for_messages(P),
+    say(P, "#ai-nocrackpots", "ok, exiting"),
+    stop(P, ""),
+    irc_lookup:shutdown();
+test(start_bots) ->
+    p1_db:start(),
+    start_bots().
+
+wait_for_messages(Client) ->
+    receive
+        Anything ->
+            io:format("Anything: ~w~n", [Anything]),
+            wait_for_messages(Client)
+    after connection_timeout() + 10000 ->
+            io:format("Timed out")
+    end.

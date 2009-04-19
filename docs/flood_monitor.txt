@@ -1,0 +1,14 @@
+start server, registers itself as flood_protect
+
+update(User, Class)
+   updates the users information for that class. it returns the type {Number of actions, Period of time}
+
+delete(User)
+   remove all of a users information formteh flood
+
+compare(T1, T2)
+   Ret < 0 : T1 < T2, Ret = 0 : T1 = T2, Ret > 0 : T1 > T2
+
+Storing information
+   Information on a user is stored in a dict.  Each value in the dict is another dict, and ecah value in there is a list of times
+   
