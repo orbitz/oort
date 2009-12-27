@@ -65,7 +65,7 @@ init([Client]) ->
     Dict = dict:from_list([
                            {nick, Client#irc_client_info.nick},
                            {realname, Client#irc_client_info.realname},
-                           {servers, Client#irc_client_info.servers},
+                           {servers, lists:reverse(Client#irc_client_info.servers)},
                            {password, Client#irc_client_info.password}]),
     {ok, #state{client=Dict, sock=undefined, state=disconn, cmd_queue=queue:new(), cmd_curr=undefined}}.
 
@@ -355,7 +355,7 @@ connect(Irclib, Fun) ->
                                                        func=Fun,
                                                        command=irc_connect,
                                                        handler=fun irc_handlers:handle_connect/4}},
-                   30000).
+                   1800000).
 
 disconnect(Irclib) ->
     gen_server:call(Irclib, irc_disconnect).

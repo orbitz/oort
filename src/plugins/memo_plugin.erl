@@ -32,14 +32,19 @@ deps() ->
 loop() ->
     receive
         {{bot_plugin, "PRIVMSG"}, {From, To, Message}, Bot} ->
+            {ok, Name} = bot_manager:fetch_name(Bot),
+            BotStr = atom_to_list(Name),
+            {ok, Nick, _, _} = irc_lib:decode_mask(From),
+            FromValue = Nick ++ "@" ++ BotStr,
             case p1_utils:should_handle(From, To, Message, Bot) of
                 false ->
-                    ok;
+                    case check_for_memos(FromValue) of
+                        true ->
+                            irc_bot:say(Bot, Nick, "You have memos awaiting you, type say \"oort memo read\" in order to read them");
+                        false ->
+                            ok
+                    end;
                 Msg ->
-                    {ok, Name} = bot_manager:fetch_name(Bot),
-                    BotStr = atom_to_list(Name),
-                    {ok, Nick, _, _} = irc_lib:decode_mask(From),
-                    FromValue = Nick ++ "@" ++ BotStr,
                     SayList = case handle_message(FromValue, To, BotStr, Msg) of
                                   {ok, Say} ->
                                       Say;
@@ -50,7 +55,9 @@ loop() ->
                                   {error, bad_param} ->
                                       ["You have given me a bad paramter, jackass"];
                                   {error, _} ->
-                                      ["I quite honestly do not know what happened here"]
+                                      ["I quite honestly do not know what happened here"];
+                                  {ignore, _} ->
+                                      []
                               end,
                     lists:foreach(fun(OutMsg) -> irc_bot:say(Bot, Nick, OutMsg) end, SayList)
             end
@@ -86,6 +93,12 @@ delete_memo(Memo) ->
     {atomic, ok} = p1_db:delete_record(Memo),
     ok.
 
+%%
+% Checks to see if any memos exist for a user
+% Returns true if there are memos to be processed
+check_for_memos(To) ->
+    length(read_memos(To)) /= 0.
+
 
 %%
 % This handles a message that comes in from a channel
@@ -116,15 +129,27 @@ handle_parsed_message(From, _To, _BotName, {read_memo, Value}) ->
         Memos when Value > 0 andalso length(Memos) =< Value andalso length(Memos) /= 0 ->
             Memo = lists:nth(Value, Memos),
             delete_memo(Memo),
-            {ok, [Memo#memos.message]};
+            {ok, [format_memo(Memo)]};
         _ ->
             {ok, "Invalid index cheif"}
     end;
 
 %%
+% Sends them all of the memos they have and deletes them
+handle_parsed_message(From, _To, _BotName, {read_memo_all}) ->
+    Memos = read_memos(From),
+    lists:foreach(fun(M) -> delete_memo(M) end, Memos),
+    {ok, [format_memo(M) || M <- Memos]};
+
+%%
 % Just delete them
 handle_parsed_message(_From, _To, _BotName, {delete_memo, _Value}) ->
     {ok, ["This does nothing currently"]}.
+
+
+format_memo(Memo) ->
+    [Nick | _Rest] = string:tokens(Memo#memos.from, "@"),
+    Nick ++ " says: " ++ Memo#memos.message.
 
 parse_message(Message) ->
     case Message of
@@ -134,6 +159,8 @@ parse_message(Message) ->
             parse_memo_for(Rest);
         "memo read " ++ Rest ->
             parse_memo_read(Rest);
+        "memo read" ->
+            parse_memo_read_all();
         "memo delete " ++ Rest ->
             parse_memo_delete(Rest);
         "memo del " ++ Rest ->
@@ -166,6 +193,8 @@ parse_memo_read(Message) ->
             {error, bad_param}
     end.
 
+parse_memo_read_all() ->
+    {ok, {read_memo_all}}.
 
 parse_memo_delete(Message) ->
     {ok, {read_memo, Int}} = parse_memo_read(Message),
