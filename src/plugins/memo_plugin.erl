@@ -142,6 +142,15 @@ handle_parsed_message(From, _To, _BotName, {read_memo_all}) ->
     {ok, [format_memo(M) || M <- Memos]};
 
 %%
+% Gives user a help menu
+handle_parsed_message(_From, _To, _BotName, {help_memo}) ->
+    {ok, ["Memo help:",
+          "oort memo for <who> <text> -- Give someone a memo",
+          "oort memo read -- Read all your memos",
+          "oort memo read # -- Read a particular memo",
+          "oort memo help -- This",
+          "Note, all memos are deleted upon reading"]};
+%%
 % Just delete them
 handle_parsed_message(_From, _To, _BotName, {delete_memo, _Value}) ->
     {ok, ["This does nothing currently"]}.
@@ -165,6 +174,8 @@ parse_message(Message) ->
             parse_memo_delete(Rest);
         "memo del " ++ Rest ->
             parse_memo_delete(Rest);
+        "memo help" ->
+            parse_memo_help();
         "memo " ++ _ ->
             {error, unknown_command};
         _ ->
@@ -200,3 +211,5 @@ parse_memo_delete(Message) ->
     {ok, {read_memo, Int}} = parse_memo_read(Message),
     {ok, {delete_memo, Int}}.
 
+parse_memo_help() ->
+    {ok, {help_memo}}.
