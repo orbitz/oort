@@ -20,7 +20,7 @@
 %% Description: load's all of the plugins in the table
 %%--------------------------------------------------------------------
 load() ->
-    lists:foldl(fun load_pl/2, [], [factoid_plugin]).
+    lists:foldl(fun load_pl/2, [], [factoid_plugin, memo_plugin]).
 
 
 %%--------------------------------------------------------------------

@@ -3,7 +3,20 @@
 
 -include("db.hrl").
 
--export([create_tables/0, start/0, stop/0, insert_row/1, select/2, foldl/3, write/1, wait_for_tables/0, create_database/0, read/2, transaction/1]).
+-export([create_tables/0,
+         start/0,
+         stop/0,
+         insert_row/1,
+         select/2,
+         foldl/3,
+         write/1,
+         wait_for_tables/0,
+         create_database/0,
+         read/2,
+         transaction/1,
+         create_table/2,
+         delete/2,
+         delete_record/1]).
 
 start() ->
     ok = mnesia:start().
@@ -20,6 +33,19 @@ create_tables() ->
     mnesia:create_table(plugin_record, [{disc_copies, [node()]}, {record_name, plugin_record}, {type, set}]),
     mnesia:create_table(factoid_data, [{type, bag}, {disc_copies, [node()]}, {attributes, record_info(fields, factoid_data)}]).
 
+
+%%
+% This creates a table if it does not exist already
+create_table(Name, Opts) ->
+    Tables = mnesia:system_info(local_tables),
+    case lists:member(Name, Tables) of
+        true ->
+            ok;
+        false ->
+            {atomic, ok} = mnesia:create_table(Name, Opts),
+            ok
+    end.
+        
 
 insert_row(Row) ->
     F = fun() -> 
@@ -48,6 +74,18 @@ write(Data) ->
 read(Tab, Key) ->
     F = fun() ->
                 mnesia:read(Tab, Key, read)
+        end,
+    transaction(F).
+
+delete(Tab, Key) ->
+    F = fun() ->
+                mnesia:delete({Tab, Key})
+        end,
+    transaction(F).
+
+delete_record(Record) ->
+    F = fun() ->
+                mnesia:delete_object(Record)
         end,
     transaction(F).
 

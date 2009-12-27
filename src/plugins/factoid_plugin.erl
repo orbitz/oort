@@ -95,7 +95,7 @@ bot_trigger(Nick, Message) ->
 
 should_handle(From, _Channel, Message, Bot) ->
     {ok, Nick, _Ident, _Hostname} = irc_lib:decode_mask(From),
-    case lists:member(string:to_lower(Nick), ["candide", "geordi", "nolyc"]) of
+    case lists:member(string:to_lower(Nick), ["candide", "geordi", "nolyc", "bioperl-bot"]) of
         true ->
             false;
         false ->
