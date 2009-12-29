@@ -35,7 +35,7 @@ loop() ->
             {ok, Name} = bot_manager:fetch_name(Bot),
             BotStr = atom_to_list(Name),
             {ok, Nick, _, _} = irc_lib:decode_mask(From),
-            FromValue = Nick ++ "@" ++ BotStr,
+            FromValue = string:to_lower(Nick) ++ "@" ++ BotStr,
             case p1_utils:should_handle(From, To, Message, Bot) of
                 false ->
                     case check_for_memos(FromValue) of
@@ -190,7 +190,7 @@ parse_memo_for(Message) ->
         {_Name, []} ->
             {error, missing_params};
         {Name, Msg} ->
-            {ok, {add_memo, Name, string:strip(Msg, left)}}
+            {ok, {add_memo, string:to_lower(Name), string:strip(Msg, left)}}
     end.
 
 parse_memo_read(Message) ->
