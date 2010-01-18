@@ -16,7 +16,8 @@
          transaction/1,
          create_table/2,
          delete/2,
-         delete_record/1]).
+         delete_record/1,
+         get_all_keys/1]).
 
 start() ->
     ok = mnesia:start().
@@ -48,46 +49,29 @@ create_table(Name, Opts) ->
         
 
 insert_row(Row) ->
-    F = fun() -> 
-                mnesia:write(Row)
-        end,
-    transaction(F).
+    transaction(fun() -> mnesia:write(Row) end).
 
 select(Tag, Matchspec) ->
-    F = fun() ->
-                mnesia:select(Tag, Matchspec)
-        end,
-    transaction(F).
+    transaction(fun() -> mnesia:select(Tag, Matchspec) end).
 
 foldl(Func, Acc0, Tab) ->
-    F = fun() ->
-                mnesia:foldl(Func, Acc0, Tab)
-        end,
-    transaction(F).
+    transaction(fun() -> mnesia:foldl(Func, Acc0, Tab) end).
 
 write(Data) ->
-    F = fun() ->
-                mnesia:write(Data)
-        end,
-    transaction(F).
+    transaction(fun() -> mnesia:write(Data) end).
 
 read(Tab, Key) ->
-    F = fun() ->
-                mnesia:read(Tab, Key, read)
-        end,
-    transaction(F).
+    transaction(fun() -> mnesia:read(Tab, Key, read) end).
 
 delete(Tab, Key) ->
-    F = fun() ->
-                mnesia:delete({Tab, Key})
-        end,
-    transaction(F).
+    transaction(fun() -> mnesia:delete({Tab, Key}) end).
 
 delete_record(Record) ->
-    F = fun() ->
-                mnesia:delete_object(Record)
-        end,
-    transaction(F).
+    transaction(fun() -> mnesia:delete_object(Record) end).
+
+get_all_keys(Table) ->
+    transaction(fun() -> mnesia:all_keys(Table) end).
+                
 
 transaction(Fun) ->
     mnesia:transaction(Fun).
