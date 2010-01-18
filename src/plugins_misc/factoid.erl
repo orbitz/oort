@@ -185,7 +185,7 @@ replace_single_arg(Idx, String, Args) ->
         [] ->
             throw({error, bad_index});
         Word ->
-            re:replace(String, "\\$\\{" ++ Idx ++ "\\}", Word, [{return, list}])
+            re:replace(String, "\\$\\{" ++ Idx ++ "\\}", Word, [{return, list}, global])
     end.
 
 %%
