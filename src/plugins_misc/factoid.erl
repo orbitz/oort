@@ -181,11 +181,18 @@ to_integer(String) ->
     end.
 
 replace_single_arg(Idx, String, Args) ->
-    case string:sub_word(Args, to_integer(Idx)) of
-        [] ->
-            throw({error, bad_index});
-        Word ->
-            re:replace(String, "\\$\\{" ++ Idx ++ "\\}", Word, [{return, list}, global])
+    case Idx of
+        %%
+        % Special casing this right now
+        "1-" ->
+            re:replace(String, "\\$\\{" ++ Idx ++ "\\}", Args, [{return, list}, global]);
+        _ ->
+            case string:sub_word(Args, to_integer(Idx)) of
+                [] ->
+                    throw({error, bad_index});
+                Word ->
+                    re:replace(String, "\\$\\{" ++ Idx ++ "\\}", Word, [{return, list}, global])
+            end
     end.
 
 %%
@@ -234,7 +241,7 @@ find_most_derived(FactoidList, Heirarchy) ->
     % We want to extract all those factoids that are in the heirarchy
     % and then sort them by revision, the last to the first
     [Last|_] = lists:sort(fun(X, Y) -> not (X#factoid_data.revision =< Y#factoid_data.revision) end,
-                          lists:filter(fun(X) -> find_idx(X, Heirarchy) /= error end,
+                          lists:filter(fun(X) -> find_idx(X#factoid_data.id, Heirarchy) /= not_found end,
                                        FactoidList)),
     Last.
 
@@ -275,7 +282,7 @@ create_new_id(Now, Last, Heirarchy) ->
 % Finds the index of an element in a list
 % returns not_found if the elemnt cannot be found
 find_idx(E, L) ->
-    find_idx(E, L, 0).
+    find_idx(E, L, 1).
 
 find_idx(_E, [], _Idx) ->
     not_found;

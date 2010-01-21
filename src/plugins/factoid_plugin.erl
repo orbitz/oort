@@ -67,8 +67,16 @@ factoid_result(To, {get, {ok, #factoid_data{data={function, Func}}}, Leftover}, 
             irc_bot:say(Bot, To, "That caused an exception, don't do that")%,
             %irc_bot:say(Bot, To, lists:flatten(io_lib:format("~w", [Exc])))
     end;
-factoid_result(To, What, Bot) ->
-    irc_bot:say(Bot, "orbitz", io_lib:format("~w ~w", [To, What])),
+factoid_result(To, {get_who, Who, {ok, #factoid_data{data={function, Func}}}, Leftover}, Bot) ->
+    case catch(Func(To, Bot, Leftover)) of
+        Res when is_list(Res) ->
+            irc_bot:say(Bot, To, Who ++ ": " ++ Res);
+        _Exc ->
+            irc_bot:say(Bot, To, "That caused an exception, don't do that")%,
+            %irc_bot:say(Bot, To, lists:flatten(io_lib:format("~w", [Exc])))
+    end;
+factoid_result(_To, _What, _Bot) ->
+    %irc_bot:say(Bot, "orbitz", io_lib:format("~w ~w", [To, What])),
     ok.
                       
 
