@@ -4,7 +4,7 @@
 
 -export([start/0, init/0, deps/0, loop/0]).
 
--export([search_factoid/3, delete_factoid/3, change_factoid/3, literal_factoid/3]).
+-export([search_factoid/3, delete_factoid/3, change_factoid/3, literal_factoid/3, get_raw_factoid/3]).
 
 start() ->
     spawn(factoid_plugin, init, []).
@@ -24,17 +24,18 @@ loop() ->
                 false ->
                     ok;
                 Msg ->
-                    privmsg(From, To, Msg, Bot)
+                    privmsg(From, To, To, Msg, Bot)
             end;
-        {{bot_plugin, "PRIVMSG"}, {_From, _To, _Message}, _Bot} ->
-            ok
+        {{bot_plugin, "PRIVMSG"}, {From, _To, Message}, Bot} ->
+            {ok, Nick, _, _} = irc_lib:decode_mask(From),
+            privmsg(From, Nick, nil, Message, Bot)
     end,
     factoid_plugin:loop().
 
 %% Helper functions
-privmsg(From, To, Message, Bot) ->
+privmsg(From, To, Id, Message, Bot) ->
     {ok, Name} = bot_manager:fetch_name(Bot),
-    factoid_result(To, factoid:process(From, {To, Name}, Message), Bot).
+    factoid_result(To, factoid:process(From, {Id, Name}, Message), Bot).
 
 factoid_result(To, {set, {ok, #factoid_data{name=Name}}}, Bot) ->
     irc_bot:say(Bot, To, Name ++ " set."),
@@ -79,6 +80,17 @@ factoid_result(_To, _What, _Bot) ->
     %irc_bot:say(Bot, "orbitz", io_lib:format("~w ~w", [To, What])),
     ok.
                       
+
+get_raw_factoid(To, Bot, Factoid) ->
+    {ok, Name} = bot_manager:fetch_name(Bot),
+    case factoid:get(Factoid, {To, Name}) of
+        {ok, #factoid_data{data={string, String}}} ->
+            String;
+        {error, factoid_not_found} ->
+            "Factoid " ++ Factoid ++ " was not found";
+        _ ->
+            "Factoid could not be displayed as text"
+    end.
 
 search_factoid(To, Bot, SearchString) ->
     {ok, Name} = bot_manager:fetch_name(Bot),

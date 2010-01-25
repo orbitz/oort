@@ -32,37 +32,66 @@ deps() ->
 loop() ->
     receive
         {{bot_plugin, "PRIVMSG"}, {From, To, Message}, Bot} ->
-            {ok, Name} = bot_manager:fetch_name(Bot),
-            BotStr = atom_to_list(Name),
-            {ok, Nick, _, _} = irc_lib:decode_mask(From),
-            FromValue = string:to_lower(Nick) ++ "@" ++ BotStr,
-            case p1_utils:should_handle(From, To, Message, Bot) of
-                false ->
-                    case check_for_memos(FromValue) of
-                        true ->
-                            irc_bot:say(Bot, Nick, "You have memos awaiting you, type say \"oort memo read\" in order to read them");
-                        false ->
-                            ok
-                    end;
-                Msg ->
-                    SayList = case handle_message(FromValue, To, BotStr, Msg) of
-                                  {ok, Say} ->
-                                      Say;
-                                  {error, unknown_command} ->
-                                      ["Unknown command"];
-                                  {error, missing_params} ->
-                                      ["You are missing some parameters"];
-                                  {error, bad_param} ->
-                                      ["You have given me a bad paramter, jackass"];
-                                  {error, _} ->
-                                      ["I quite honestly do not know what happened here"];
-                                  {ignore, _} ->
-                                      []
-                              end,
-                    lists:foreach(fun(OutMsg) -> irc_bot:say(Bot, Nick, OutMsg) end, SayList)
+            case To of
+                [$#|_] ->
+                    handle_channel_message(From, To, Message, Bot);
+                _ ->
+                    handle_private_message(From, To, Message, Bot)
             end
     end,
     memo_plugin:loop().
+
+
+handle_private_message(From, To, Message, Bot) ->
+    {ok, Name} = bot_manager:fetch_name(Bot),
+    BotStr = atom_to_list(Name),
+    {ok, Nick, _, _} = irc_lib:decode_mask(From),
+    FromValue = string:to_lower(Nick) ++ "@" ++ BotStr,
+    case handle_message(FromValue, To, BotStr, Message) of
+        {ok, Say} ->
+            lists:foreach(fun(OutMsg) -> irc_bot:say(Bot, Nick, OutMsg) end, Say);
+        {ignore, _} ->
+            case check_for_memos(FromValue) of
+                true ->
+                    irc_bot:say(Bot, Nick, "You have memos awaiting you, type say \"memo read\" in order to read them");
+                false ->
+                    ok
+            end;
+         _ ->
+            ok
+    end.
+
+
+handle_channel_message(From, To, Message, Bot) ->
+    {ok, Name} = bot_manager:fetch_name(Bot),
+    BotStr = atom_to_list(Name),
+    {ok, Nick, _, _} = irc_lib:decode_mask(From),
+    FromValue = string:to_lower(Nick) ++ "@" ++ BotStr,
+    case p1_utils:should_handle(From, To, Message, Bot) of
+        false ->
+            case check_for_memos(FromValue) of
+                true ->
+                    irc_bot:say(Bot, Nick, "You have memos awaiting you, type say \"memo read\" in order to read them");
+                false ->
+                    ok
+            end;
+        Msg ->
+            SayList = case handle_message(FromValue, To, BotStr, Msg) of
+                          {ok, Say} ->
+                              Say;
+                          {error, unknown_command} ->
+                              ["Unknown command"];
+                          {error, missing_params} ->
+                              ["You are missing some parameters"];
+                          {error, bad_param} ->
+                              ["You have given me a bad paramter, jackass"];
+                          {error, _} ->
+                              ["I quite honestly do not know what happened here"];
+                          {ignore, _} ->
+                              []
+                      end,
+            lists:foreach(fun(OutMsg) -> irc_bot:say(Bot, Nick, OutMsg) end, SayList)
+    end.    
 
 
 %%
@@ -145,10 +174,10 @@ handle_parsed_message(From, _To, _BotName, {read_memo_all}) ->
 % Gives user a help menu
 handle_parsed_message(_From, _To, _BotName, {help_memo}) ->
     {ok, ["Memo help:",
-          "oort memo for <who> <text> -- Give someone a memo",
-          "oort memo read -- Read all your memos",
-          "oort memo read # -- Read a particular memo",
-          "oort memo help -- This",
+          "memo for <who> <text> -- Give someone a memo",
+          "memo read -- Read all your memos",
+          "memo read # -- Read a particular memo",
+          "memo help -- This",
           "Note, all memos are deleted upon reading"]};
 %%
 % Just delete them
