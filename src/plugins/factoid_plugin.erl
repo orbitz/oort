@@ -4,7 +4,7 @@
 
 -export([start/0, init/0, deps/0, loop/0]).
 
--export([search_factoid/3, delete_factoid/3, change_factoid/3, literal_factoid/3, get_raw_factoid/3]).
+-export([search_factoid/3, delete_factoid/3, change_factoid/3, literal_factoid/3, get_raw_factoid/3, apropos_factoid/3]).
 
 start() ->
     spawn(factoid_plugin, init, []).
@@ -80,6 +80,14 @@ factoid_result(_To, _What, _Bot) ->
     %irc_bot:say(Bot, "orbitz", io_lib:format("~w ~w", [To, What])),
     ok.
                       
+apropos_factoid(To, Bot, SearchString) ->
+    {ok, Name} = bot_manager:fetch_name(Bot),
+    case factoid:apropos(SearchString, {To, Name}) of
+        [] ->
+            "No factoids found by that name";
+        Factoids ->
+            "Found: " ++ string:join(Factoids, ", ")
+    end.
 
 get_raw_factoid(To, Bot, Factoid) ->
     {ok, Name} = bot_manager:fetch_name(Bot),

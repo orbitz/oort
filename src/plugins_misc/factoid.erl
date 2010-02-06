@@ -8,7 +8,8 @@
          get/2,
          delete/2,
          search/2,
-         replace_args/2]).
+         replace_args/2,
+         apropos/2]).
 
 %%
 % Records needed for factoids and inheritence
@@ -103,9 +104,13 @@ process(_Who, Where, Message) ->
 set(FactoidRaw, Where, Readonly, Data) ->
     Factoid = string:to_lower(FactoidRaw),
     {atomic, Namelist} = p1_db:read(factoid_data, Factoid),
-    {ok, Record} = create_record_from_data(Factoid, Where, Data, Readonly, Namelist),
-    {ok, _} = insert_factoid(Record),
-    {ok, Record}.
+    case create_record_from_data(Factoid, Where, Data, Readonly, Namelist) of
+        {ok, Record} ->
+            {ok, _} = insert_factoid(Record),
+            {ok, Record};
+        Else ->
+            Else
+    end.
 
 %%
 % Same as set, but assumes Readonly to be false
@@ -159,7 +164,23 @@ search(SearchStringRaw, Where) ->
     % Just get the names from what is left over
     lists:map(fun(R) -> R#factoid_data.name end, Records).
                       
-
+%%
+% This searches the contents of all factoids for a particular string, it is case insensitive
+% right now eventually it will take a regex
+apropos(SearchStringRaw, Where) ->
+    SearchString = string:to_lower(SearchStringRaw),
+    {atomic, Keys} = p1_db:get_all_keys(factoid_data),
+    %%
+    % Select only strings that contain our search string
+    Records = lists:filter(fun(R) -> case R#factoid_data.data of
+                                         {string, Content} -> string:str(string:to_lower(Content), SearchString) /= 0;
+                                         _ -> false
+                                     end
+                           end,
+                           lists:map(fun(K) -> {ok, Record} = get(K, Where), Record end, Keys)),
+    %%
+    % Just get the names from what is left over
+    lists:map(fun(R) -> R#factoid_data.name end, Records).
 
 %%
 % This takes a string and replaces arguments in it based on Args
@@ -177,14 +198,17 @@ to_integer(String) ->
         {error, no_integer} ->
             throw({error, malformed_idx});
         {Int, []} ->
-            Int
+            Int;
+        {_Int, _} ->
+            throw({error, malformed_idx})
+                
     end.
 
 replace_single_arg(Idx, String, Args) ->
     case Idx of
         %%
         % Special casing this right now
-        "1-" ->
+ "1-" ->
             re:replace(String, "\\$\\{" ++ Idx ++ "\\}", Args, [{return, list}, global]);
         _ ->
             case string:sub_word(Args, to_integer(Idx)) of
