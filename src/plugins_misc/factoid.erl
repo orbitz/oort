@@ -197,7 +197,7 @@ to_integer(String) ->
     case string:to_integer(String) of
         {error, no_integer} ->
             throw({error, malformed_idx});
-        {Int, []} ->
+        {Int, []} when Int > 0 ->
             Int;
         {_Int, _} ->
             throw({error, malformed_idx})
